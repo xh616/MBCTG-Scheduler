@@ -1,0 +1,247 @@
+package main
+
+import (
+	"MBCTG/definition"
+	"MBCTG/utils"
+	"context"
+	"fmt"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	watchapi "k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"os"
+	"sync"
+	"time"
+)
+
+const (
+	maxConcurrentSchedules = 50     // 最大并发调度数
+	podQueueSize           = 1000   // Pod队列缓冲区大小
+	monitorInterval       = 30 * time.Second // 监控间隔
+)
+
+var (
+	// podChan 用于存储待调度的 Pod
+	podChan chan *corev1.Pod
+	// 工作goroutine池
+	workerPool  chan struct{}
+	// lock 用于保护共享资源
+	lock sync.Mutex
+)
+
+// deletePod 删除指定 Pod
+func deletePod(scheduler *definition.CustomScheduler, pod *corev1.Pod) {
+	namespace := pod.ObjectMeta.Namespace
+	podName := pod.ObjectMeta.Name
+	fmt.Printf("正在删除 Pod: %s (Namespace: %s)\n", podName, namespace)
+	err := scheduler.Clientset.CoreV1().Pods(namespace).Delete(context.TODO(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		// 尝试解析错误消息（此处简单打印错误）
+		fmt.Printf("删除 Pod %s 时发生异常: %v\n", podName, err)
+	}
+}
+
+// podScheduler 从队列中取出 Pod 并调用调度器进行调度
+func podScheduler(scheduler *definition.CustomScheduler) {
+	for {
+		pod := <-podChan
+		lock.Lock()
+		func() {
+			defer lock.Unlock()
+			fmt.Printf("创建 pod - named %s\n", pod.ObjectMeta.Name)
+			if err := scheduler.Schedule(pod); err != nil {
+				fmt.Printf("调度异常: %v\n", err)
+			}
+		}()
+		time.Sleep(30 * time.Second)
+	}
+}
+
+// watchRealK8sEvents 监听 Kubernetes 事件，并根据事件类型执行相应操作
+func watchRealK8sEvents(scheduler *definition.CustomScheduler) {
+	// 启动调度 goroutine
+	go podScheduler(scheduler)
+	// 创建 Watch
+	watcher, err := scheduler.Clientset.CoreV1().Pods("").Watch(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Println("创建 Watch 出错:", err)
+		return
+	}
+	// 遍历 Watch 返回的事件
+	for event := range watcher.ResultChan() {
+		pod, ok := event.Object.(*corev1.Pod)
+		if !ok {
+			continue
+		}
+		eventType := event.Type
+		podName := pod.ObjectMeta.Name
+		podNamespace := pod.ObjectMeta.Namespace
+		fmt.Printf("----> 监听到 Pod: %s 事件: %s <----\n", podName, eventType)
+		if pod.Status.Phase == corev1.PodPending && eventType == watchapi.Added && pod.Spec.SchedulerName == scheduler.SchedulerName {
+			// 将 Pod 放入队列
+			podChan <- pod
+		} else if pod.Status.Phase == corev1.PodFailed &&
+			(pod.Status.Reason == "OutOfmemory" || pod.Status.Reason == "OutOfcpu") {
+			fmt.Printf("检测到 Pod %s 在 Namespace %s 资源不足，将删除该 Pod\n", podName, podNamespace)
+			deletePod(scheduler, pod)
+		} else if eventType == watchapi.Deleted && pod.Spec.SchedulerName == scheduler.SchedulerName {
+			lock.Lock()
+			scheduler.UpdateNodePods(pod)
+			lock.Unlock()
+		}
+	}
+}
+
+// printDictsToFile 定时获取节点监控数据并写入文件
+func printDictsToFile() {
+	for {
+		nodesCPU, err := utils.HttpGetNodeMonitor("cpu")
+		if err != nil {
+			fmt.Println("获取 CPU 数据错误:", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
+		nodesMem, err := utils.HttpGetNodeMonitor("mem")
+		if err != nil {
+			fmt.Println("获取 Mem 数据错误:", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
+		cpuUsage := make(map[string]float64)
+		memUsage := make(map[string]float64)
+		for key, value := range nodesCPU {
+			cpuUsage[key] = value / 1000.0
+		}
+		for key, value := range nodesMem {
+			memUsage[key] = value / (1024 * 1024)
+		}
+		currentTime := time.Now().Format(time.RFC3339)
+		f, err := os.OpenFile("node_resource.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Println("打开文件错误:", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
+		// 写入监控数据
+		content := fmt.Sprintf("time: %s\nCPU: %v\nMem: %v\n", currentTime, cpuUsage, memUsage)
+		if _, err := f.WriteString(content); err != nil {
+			fmt.Println("写入文件错误:", err)
+		}
+		err = f.Close()
+		if err != nil {
+			return
+		}
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func main() {
+	// 加载 kubeconfig 文件
+	kubeconfig := "kube/config"
+	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		fmt.Println("加载 kubeconfig 错误:", err)
+		return
+	}
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		fmt.Println("创建 clientset 错误:", err)
+		return
+	}
+
+	// 获取 ready_nodes（节点名称 -> IP）
+	readyNodes := make(map[string]string)
+	nodesNames, err := utils.K8sNodesAvailableNames(true)
+	if err != nil {
+		fmt.Println("获取节点名称错误:", err)
+		return
+	}
+	for _, n := range nodesNames {
+		ip := utils.GetNodeIPByName(n)
+		readyNodes[n] = ip
+	}
+	fmt.Println("ready_nodes:", readyNodes)
+
+	// 创建调度器实例
+	scheduler, err := definition.NewCustomScheduler(definition.SchedulerName)
+	if err != nil {
+		fmt.Println("创建调度器错误:", err)
+		return
+	}
+	// 设置 scheduler 的 clientset
+	scheduler.Clientset = clientset
+
+	// 获取并保存基础资源占用数据
+	cpuMonitor, err := utils.HttpGetNodeMonitor("cpu")
+	if err != nil {
+		fmt.Println("获取 CPU 监控数据错误:", err)
+	}
+	memMonitor, err := utils.HttpGetNodeMonitor("mem")
+	if err != nil {
+		fmt.Println("获取 Mem 监控数据错误:", err)
+	}
+	definition.BasicOccupationCpu = cpuMonitor
+	definition.BasicOccupationMem = memMonitor
+
+	cpuUsage := make(map[string]float64)
+	memUsage := make(map[string]float64)
+	for key, value := range definition.BasicOccupationCpu {
+		cpuUsage[key] = value / 1000.0
+	}
+	for key, value := range definition.BasicOccupationMem {
+		memUsage[key] = value / (1024 * 1024)
+	}
+	fmt.Println("集群中已有资源占用：")
+	fmt.Printf("CPU: %v\n", cpuUsage)
+	fmt.Printf("Mem: %v\n", memUsage)
+	fmt.Println("---->自定义调度器启动<----")
+
+	// 启动定时写文件的 goroutine
+	go printDictsToFile()
+	// 初始化缓冲通道（缓冲区大小可根据需要调整）
+	podChan = make(chan *corev1.Pod, podQueueSize)
+	workerPool = make(chan struct{}, maxConcurrentSchedules)
+
+	// 启动调度工作goroutine
+	for i := 0; i < maxConcurrentSchedules; i++ {
+		workerPool <- struct{}{}
+		go podSchedulerWorker(scheduler)
+	}
+	// 开始监听 Kubernetes 事件
+	watchRealK8sEvents(scheduler)
+}
+
+// podSchedulerWorker 调度工作goroutine
+func podSchedulerWorker(scheduler *definition.CustomScheduler) {
+	for pod := range podChan {
+		// 获取worker令牌
+		<-workerPool
+
+		// 更新指标
+		metrics.Lock()
+		metrics.ActiveSchedules++
+		metrics.QueueLength = len(podChan)
+		metrics.Unlock()
+
+		// 调度Pod
+		startTime := time.Now()
+		err := scheduler.Schedule(pod)
+		duration := time.Since(startTime)
+
+		// 更新指标
+		metrics.Lock()
+		metrics.ActiveSchedules--
+		if err != nil {
+			metrics.FailedSchedules++
+			fmt.Printf("调度Pod %s 失败 (耗时: %v): %v\n", pod.ObjectMeta.Name, duration, err)
+		} else {
+			metrics.TotalPodsScheduled++
+			fmt.Printf("成功调度Pod %s (耗时: %v)\n", pod.ObjectMeta.Name, duration)
+		}
+		metrics.Unlock()
+
+		// 归还worker令牌
+		workerPool <- struct{}{}
+	}
+}
