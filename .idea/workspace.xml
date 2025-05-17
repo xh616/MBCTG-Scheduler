@@ -4,24 +4,9 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="10198f70-1fcf-491c-8591-e6aa80e1b6ec" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/test.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test_monitor.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/Scheduler.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/MBCTG.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/material_theme_project_new.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/material_theme_project_new.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/definition/Scheduler.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/Scheduler.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/definition/Struct.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/definition/Struct.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/definition/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/definition/config.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/convert.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/utils/convert.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/getK8sObject.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/utils/getK8sObject.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/monitor.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/utils/monitor.go" afterDir="false" />
+    <list default="true" id="10198f70-1fcf-491c-8591-e6aa80e1b6ec" name="更改" comment="MBCTG">
+      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -132,6 +117,10 @@
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="应用程序级" UseSingleDictionary="true" transferred="true" />
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="MBCTG" />
+    <option name="LAST_COMMIT_MESSAGE" value="MBCTG" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>
