@@ -2,6 +2,7 @@ package definition
 
 import (
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 )
 
 // 常量定义
@@ -19,6 +20,8 @@ const (
 
 // 变量定义
 var (
+	ClientSet *kubernetes.Clientset
+
 	CloudNodes   = []string{"master", "node1", "node2"}
 	AmdEdgeNodes = []string{"edge1", "edge2", "edge3", "edge4"}
 	ArmEdgeNodes = []string{"rasp1-arm", "rasp2-arm", "rasp3-arm", "rasp5-arm"}
@@ -60,13 +63,36 @@ var (
 	BasicOccupationCpu = map[string]float64{}
 	BasicOccupationMem = map[string]float64{}
 
-	// NodeCpuFreeURL URL 构造（使用 fmt.Sprintf）
-	NodeCpuFreeURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", job=\"%s\"}[2m]))", MasterIp, PrometheusPort, JOB)
-	NodeMemFreeURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=node_memory_MemAvailable_bytes{job=\"%s\"}%%20/%%20node_memory_MemTotal_bytes{job=\"%s\"}", MasterIp, PrometheusPort, JOB, JOB)
+	// NodeCpuFreeURL 过去2分钟的CPU空闲率
+	NodeCpuFreeURL = fmt.Sprintf(
+		`avg by (instance)(rate(node_cpu_seconds_total{mode="idle",job="%s"}[2m]))`,
+		JOB,
+	)
 
-	NodeCpuURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=(1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", job=\"%s\"}[2m])))*(count(count(node_cpu_seconds_total{job=\"%s\"}) by (cpu, instance)) by (instance))*1000", MasterIp, PrometheusPort, JOB, JOB)
-	NodeMemURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=node_memory_MemTotal_bytes{job=\"%s\"} - node_memory_MemAvailable_bytes{job=\"%s\"}", MasterIp, PrometheusPort, JOB, JOB)
+	// NodeMemFreeURL 内存空闲率
+	NodeMemFreeURL = fmt.Sprintf(
+		`node_memory_MemAvailable_bytes{job="%s"} / node_memory_MemTotal_bytes{job="%s"}`,
+		JOB, JOB,
+	)
 
-	PodCpuURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=sum(rate(container_cpu_usage_seconds_total{container_label_io_kubernetes_container_name != \"POD\", job = \"%s\", container_label_io_kubernetes_pod_name=\"%s\"}[2m]))*1000", MasterIp, PrometheusPort, CadvisorJob, PodName)
-	PodMemURL = fmt.Sprintf("http://%s:%d/api/v1/query?query=container_memory_usage_bytes{container_label_io_kubernetes_container_name != \"POD\", job=\"%s\", container_label_io_kubernetes_pod_name=\"%s\"}", MasterIp, PrometheusPort, CadvisorJob, PodName)
+	// NodeCpuURL Node CPU使用量（毫核心）
+	NodeCpuURL = fmt.Sprintf(
+		`(1 - avg by (instance)(rate(node_cpu_seconds_total{mode="idle",job="%s"}[2m])))*`+
+			`(count(count(node_cpu_seconds_total{job="%s"}) by (cpu,instance)) by (instance))*1000`,
+		JOB, JOB,
+	)
+
+	// NodeMemURL Node内存使用量（字节）
+	NodeMemURL = fmt.Sprintf(
+		`node_memory_MemTotal_bytes{job="%s"} - node_memory_MemAvailable_bytes{job="%s"}`,
+		JOB, JOB,
+	)
+
+	// PodCpuURL 示例：获取指定Pod的CPU使用量（需要传入podName变量）
+	PodCpuURL = `sum(rate(container_cpu_usage_seconds_total{` +
+		`container_label_io_kubernetes_container_name!="POD",job="%s",container_label_io_kubernetes_pod_name="%s"}[2m]))*1000`
+
+	// PodMemURL 示例：获取指定Pod的内存使用量
+	PodMemURL = `container_memory_usage_bytes{` +
+		`container_label_io_kubernetes_container_name!="POD",job="%s",container_label_io_kubernetes_pod_name="%s"}`
 )

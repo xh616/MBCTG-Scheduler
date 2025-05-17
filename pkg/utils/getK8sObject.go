@@ -1,19 +1,16 @@
 package utils
 
 import (
-	"MBCTG/definition"
+	"MBCTG/pkg/definition"
 	"context"
 	"errors"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
-var clientset *kubernetes.Clientset
-
-// contains 判断字符串 slice 是否包含指定字符串
-func contains(slice []string, item string) bool {
+// Contains 判断字符串 slice 是否包含指定字符串
+func Contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
 			return true
@@ -42,7 +39,7 @@ func GetNodeNameByIP(ip string) string {
 
 // K8sNodesAvailable 返回满足条件的可用节点；当 isCloud 为 true 时，仅返回云节点（需包含 label role=cloud 且名称在 CLOUD_NODES 中）
 func K8sNodesAvailable(isCloud bool) ([]*corev1.Node, error) {
-	nodesList, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodesList, err := definition.ClientSet.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +55,7 @@ func K8sNodesAvailable(isCloud bool) ([]*corev1.Node, error) {
 			if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
 				// 若只筛选云节点，则需满足 label "role" == "cloud" 且节点名称在 config.CLOUD_NODES 中
 				if isCloud {
-					if role, ok := node.Labels["role"]; ok && role == "cloud" && contains(definition.CloudNodes, node.Name) {
+					if role, ok := node.Labels["role"]; ok && role == "cloud" && Contains(definition.CloudNodes, node.Name) {
 						readyNodes = append(readyNodes, node)
 						break // 找到符合条件的 Ready 状态，跳出循环
 					}
@@ -103,44 +100,44 @@ func GetK8sNodeByName(name string) (*corev1.Node, error) {
 }
 
 // GetK8sPodMemoryRequest 获取 Pod 所有容器内存请求总和（字节）
-func GetK8sPodMemoryRequest(pod *corev1.Pod) int64 {
-	var sum int64 = 0
+func GetK8sPodMemoryRequest(pod *corev1.Pod) float64 {
+	var sum float64 = 0
 	for _, container := range pod.Spec.Containers {
 		if memQty, exists := container.Resources.Requests[corev1.ResourceMemory]; exists {
-			sum += memQty.Value()
+			sum += float64(memQty.Value())
 		}
 	}
 	return sum
 }
 
 // GetK8sPodMemoryLimits 获取 Pod 所有容器内存限制总和（字节）
-func GetK8sPodMemoryLimits(pod *corev1.Pod) int64 {
-	var sum int64 = 0
+func GetK8sPodMemoryLimits(pod *corev1.Pod) float64 {
+	var sum float64 = 0
 	for _, container := range pod.Spec.Containers {
 		if memQty, exists := container.Resources.Limits[corev1.ResourceMemory]; exists {
-			sum += memQty.Value()
+			sum += float64(memQty.Value())
 		}
 	}
 	return sum
 }
 
 // GetK8sPodCpuRequest 获取 Pod 所有容器 CPU 请求总和（毫核）
-func GetK8sPodCpuRequest(pod *corev1.Pod) int64 {
-	var sum int64 = 0
+func GetK8sPodCpuRequest(pod *corev1.Pod) float64 {
+	var sum float64 = 0
 	for _, container := range pod.Spec.Containers {
 		if cpuQty, exists := container.Resources.Requests[corev1.ResourceCPU]; exists {
-			sum += cpuQty.MilliValue()
+			sum += float64(cpuQty.MilliValue())
 		}
 	}
 	return sum
 }
 
 // GetK8sPodCpuLimits 获取 Pod 所有容器 CPU 限制总和（毫核）
-func GetK8sPodCpuLimits(pod *corev1.Pod) int64 {
-	var sum int64 = 0
+func GetK8sPodCpuLimits(pod *corev1.Pod) float64 {
+	var sum float64 = 0
 	for _, container := range pod.Spec.Containers {
 		if cpuQty, exists := container.Resources.Limits[corev1.ResourceCPU]; exists {
-			sum += cpuQty.MilliValue()
+			sum += float64(cpuQty.MilliValue())
 		}
 	}
 	return sum
@@ -156,7 +153,7 @@ func GetNodePods() (map[string][]*definition.Pod, error) {
 	for _, node := range nodes {
 		// 根据节点名称筛选 Pod
 		fieldSelector := fmt.Sprintf("spec.nodeName=%s", node.Name)
-		podsList, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+		podsList, err := definition.ClientSet.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
 			FieldSelector: fieldSelector,
 		})
 		if err != nil {

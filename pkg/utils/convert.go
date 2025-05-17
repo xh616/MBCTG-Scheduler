@@ -1,48 +1,48 @@
 package utils
 
 import (
-	"MBCTG/definition"
+	"MBCTG/pkg/definition"
 	"errors"
 	corev1 "k8s.io/api/core/v1"
 	"strconv"
 	"strings"
 )
 
-// memConvertToInt 将内存资源字符串（例如 "2Gi"）转换为整数（字节数）2147483648
-func memConvertToInt(resourceString string) (int64, error) {
+// memConvertToInt 将内存资源字符串（例如 "2Gi"）转换为字节数2147483648
+func memConvertToInt(resourceString string) (float64, error) {
 	if strings.Contains(resourceString, "Ki") {
 		valStr := strings.TrimSuffix(resourceString, "Ki") //如果 `s` 以 `suffix` 结尾，则去除该后缀。
 		val, err := strconv.ParseInt(valStr, 10, 64)       // 转十进制int
 		if err != nil {
 			return 0, err
 		}
-		return val * 1024, nil
+		return float64(val * 1 << 10), nil
 	} else if strings.Contains(resourceString, "Mi") {
 		valStr := strings.TrimSuffix(resourceString, "Mi")
 		val, err := strconv.ParseInt(valStr, 10, 64)
 		if err != nil {
 			return 0, err
 		}
-		return val * 1024 * 1024, nil
+		return float64(val * 1 << 20), nil
 	} else if strings.Contains(resourceString, "Gi") {
 		valStr := strings.TrimSuffix(resourceString, "Gi")
 		val, err := strconv.ParseInt(valStr, 10, 64)
 		if err != nil {
 			return 0, err
 		}
-		return val * 1024 * 1024 * 1024, nil
+		return float64(val * 1 << 30), nil
 	}
 	return 0, errors.New("不支持的内存格式: " + resourceString)
 }
 
 // cpuConvertToMilliValue 将 CPU 资源字符串转换为毫核数
 // 例如： "2" --> 2000， "250m" --> 250
-func cpuConvertToMilliValue(resourceString string) (int64, error) {
+func cpuConvertToMilliValue(resourceString string) (float64, error) {
 	if strings.Contains(resourceString, "m") {
 		valStr := strings.TrimSuffix(resourceString, "m")
-		return strconv.ParseInt(valStr, 10, 64)
+		return strconv.ParseFloat(valStr, 64)
 	} else {
-		val, err := strconv.ParseInt(resourceString, 10, 64)
+		val, err := strconv.ParseFloat(resourceString, 64)
 		if err != nil {
 			return 0, err
 		}
